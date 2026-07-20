@@ -8,127 +8,83 @@ on:
     branches: [main]
   workflow_dispatch:
 
-env:
-  BUILD_TYPE: release
-
 jobs:
-  build-linux:
-    runs-on: ubuntu-latest
+  build-security:
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            artifact: linux-amd64
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            artifact: macos-arm64
+          - os: macos-13
+            target: x86_64-apple-darwin
+            artifact: macos-x64
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            artifact: windows-amd64
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
         with:
-          submodules: recursive
+          path: StealthBrowser
+      - uses: actions/checkout@v4
+        with:
+          repository: StealthBrowser/stealth-adblocker
+          path: stealth-adblocker
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - name: Build security module
+        run: cargo build --release --target ${{ matrix.target }}
+        working-directory: stealth-adblocker
+      - name: Run tests
+        run: cargo test --target ${{ matrix.target }}
+        working-directory: stealth-adblocker
+      - name: Package (Unix)
+        if: runner.os != 'Windows'
+        run: |
+          cd stealth-adblocker/target/${{ matrix.target }}/release
+          tar czf ../../../stealth-adblocker-${{ matrix.artifact }}.tar.gz libstealth_adblocker.*
+          cd ../../..
+      - name: Package (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          cd stealth-adblocker/target/${{ matrix.target }}/release
+          Compress-Archive -Path stealth_adblocker.dll, stealth_adblocker.lib -DestinationPath ../../stealth-adblocker-${{ matrix.artifact }}.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: security-${{ matrix.artifact }}
+          path: stealth-adblocker/stealth-adblocker-*
+          retention-days: 30
+
+  build-ui:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: npm
-          cache-dependency-path: src/ui/package-lock.json
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          components: clippy, rustfmt
-      - name: Install system deps
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y ninja-build clang lld \
-            libgtk-3-dev libglib2.0-dev libnss3-dev libxss-dev \
-            libasound2-dev libpulse-dev libssl-dev libffi-dev \
-            libatk-bridge2.0-dev gperf bison flex \
-            libx11-xcb-dev libdrm-dev libgbm-dev
-      - name: Build Rust security module
-        run: cargo build --release --manifest-path src/security/Cargo.toml
-      - name: Test Rust module
-        run: cargo test --manifest-path src/security/Cargo.toml
       - name: Build UI
         run: |
           cd src/ui
           npm ci
           npm run build
-      - name: Build browser (Ninja)
-        run: python3 scripts/build.py --target $BUILD_TYPE --skip-rust --skip-ui
-      - name: Package
-        run: python3 scripts/build.py --package --skip-rust --skip-ui
-      - uses: actions/upload-artifact@v4
-        with:
-          name: linux-build
-          path: |
-            out/release/stealth-browser
-            dist/*
-          retention-days: 30
-
-  build-macos:
-    runs-on: macos-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          submodules: recursive
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: npm
-          cache-dependency-path: src/ui/package-lock.json
-      - uses: dtolnay/rust-toolchain@stable
-      - name: Install deps
-        run: brew install ninja gn
-      - name: Build Rust
-        run: cargo build --release --manifest-path src/security/Cargo.toml
-      - name: Test Rust
-        run: cargo test --manifest-path src/security/Cargo.toml
-      - name: Build UI
-        run: cd src/ui && npm ci && npm run build
-      - name: Build browser
-        run: python3 scripts/build.py --target $BUILD_TYPE --skip-rust --skip-ui
-      - uses: actions/upload-artifact@v4
-        with:
-          name: macos-build
-          path: |
-            out/release/stealth-browser
-            dist/*
-          retention-days: 30
-
-  build-windows:
-    runs-on: windows-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          submodules: recursive
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: npm
-          cache-dependency-path: src/ui/package-lock.json
-      - uses: dtolnay/rust-toolchain@stable
-      - name: Install deps
+      - name: Package UI
         run: |
-          choco install ninja -y
-          choco install llvm -y
-      - name: Build Rust
-        run: cargo build --release --manifest-path src/security/Cargo.toml
-      - name: Test Rust
-        run: cargo test --manifest-path src/security/Cargo.toml
-      - name: Build UI
-        run: cd src/ui; npm ci; npm run build
-      - name: Build browser
-        run: python scripts/build.py --target $env:BUILD_TYPE --skip-rust --skip-ui
+          cd src/ui/dist
+          tar czf ../../stealth-ui-web.tar.gz .
       - uses: actions/upload-artifact@v4
         with:
-          name: windows-build
-          path: |
-            out/release/stealth-browser*
-            dist/*
+          name: ui-build
+          path: stealth-ui-web.tar.gz
           retention-days: 30
-
-  test:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-      - name: Test Rust module
-        run: cargo test --manifest-path src/security/Cargo.toml
-      - name: Lint
-        run: python3 scripts/lint.py || true
 
   release:
-    needs: [build-linux, build-macos, build-windows]
+    needs: [build-security, build-ui]
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/v')
     permissions:
@@ -138,11 +94,15 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           path: artifacts
+      - name: Create source archive
+        run: |
+          git archive --format=tar.gz --prefix=StealthBrowser-${{ github.ref_name }}/ HEAD -o StealthBrowser-source.tar.gz
+      - name: List artifacts
+        run: find artifacts -type f | head -20
       - name: Generate checksums
         run: |
-          cd artifacts
-          find . -type f ! -name '*.zip' ! -name '*.txt' -exec sha256sum {} \; > ../SHA256SUMS
-          cd ..
+          find artifacts -type f \( -name "*.tar.gz" -o -name "*.zip" \) -exec sha256sum {} \; > SHA256SUMS
+          sha256sum StealthBrowser-source.tar.gz >> SHA256SUMS
           cat SHA256SUMS
       - name: Create Release
         uses: softprops/action-gh-release@v2
@@ -151,43 +111,62 @@ jobs:
           body: |
             ## Stealth Browser ${{ github.ref_name }}
 
-            ### Installation
+            A privacy-focused browser with **C++ engine**, **Rust security**, and **TypeScript UI**.
 
-            **Windows:**
-            1. Download `StealthBrowser-{version}-Setup.exe`
-            2. Run installer and follow prompts
-            3. Launch from Start Menu or Desktop shortcut
+            ### What's Included
 
-            **macOS:**
-            1. Download `StealthBrowser-{version}.dmg`
-            2. Open DMG and drag to Applications
-            3. Launch from Applications
+            | Asset | Description |
+            |-------|-------------|
+            | `stealth-adblocker-linux-amd64.tar.gz` | Ad blocker engine for Linux (x64) |
+            | `stealth-adblocker-macos-arm64.tar.gz` | Ad blocker engine for macOS (Apple Silicon) |
+            | `stealth-adblocker-macos-x64.tar.gz` | Ad blocker engine for macOS (Intel) |
+            | `stealth-adblocker-windows-amd64.zip` | Ad blocker engine for Windows (x64) |
+            | `stealth-ui-web.tar.gz` | TypeScript UI (React + Vite) |
+            | `StealthBrowser-source.tar.gz` | Full source code |
 
-            **Linux (AppImage):**
+            ### Quick Start
+
+            **Install Rust** (https://rustup.rs):
             ```bash
-            chmod +x StealthBrowser-*.AppImage
-            ./StealthBrowser-*.AppImage
+            curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
             ```
 
-            **Linux (DEB):**
+            **Build from source:**
             ```bash
-            sudo dpkg -i StealthBrowser-{version}.deb
-            stealth-browser
-            ```
-
-            **Linux (RPM):**
-            ```bash
-            sudo rpm -i StealthBrowser-{version}.rpm
-            stealth-browser
-            ```
-
-            ### Build From Source
-            ```bash
-            git clone https://github.com/itriedcoding/StealthBrowser.git
+            git clone --recurse-submodules https://github.com/StealthBrowser/StealthBrowser.git
             cd StealthBrowser
+
+            # Setup dev environment
             python3 scripts/setup.py
+
+            # Build everything
             python3 scripts/build.py --target release
+
+            # Run
+            ./out/release/stealth-browser
             ```
+
+            **Pre-built modules:**
+            ```bash
+            # Extract the ad blocker for your platform
+            tar xzf stealth-adblocker-linux-amd64.tar.gz  # Linux
+            # or
+            unzip stealth-adblocker-windows-amd64.zip      # Windows
+
+            # Extract the UI
+            tar xzf stealth-ui-web.tar.gz -C src/ui/dist/
+            ```
+
+            ### Architecture
+
+            | Component | Language | Purpose |
+            |-----------|----------|---------|
+            | Browser Engine | C++ | Chromium-based core, process isolation |
+            | Security Module | Rust | AES-256-GCM crypto, URL filtering, privacy |
+            | UI Framework | TypeScript | React-based tabs, settings, navigation |
+            | Internal Pages | HTML/CSS/JS | New tab, settings, ad blocker dashboard |
+            | Build System | GN + Ninja | Chromium-compatible build pipeline |
+            | Automation | Python | Build, lint, test, setup scripts |
 
             ### Verify
             ```bash
@@ -195,6 +174,7 @@ jobs:
             ```
           files: |
             artifacts/**/*
+            StealthBrowser-source.tar.gz
             SHA256SUMS
           draft: false
           prerelease: false
