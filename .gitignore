@@ -1,0 +1,49 @@
+# Build output
+/out/
+/dist/
+/out/
+
+# Dependencies
+/node_modules/
+/third_party/gn
+/third_party/ninja
+
+# Rust
+/src/security/target/
+
+# TypeScript
+/src/ui/node_modules/
+/src/ui/dist/
+
+# OS files
+.DS_Store
+Thumbs.db
+*.swp
+*~
+
+# IDE
+.vscode/
+.idea/
+*.code-workspace
+
+# Logs
+*.log
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# Environment
+.env
+.env.local
+
+# Compiled
+*.o
+*.obj
+*.exe
+*.dll
+*.so
+*.dylib
+*.a
+*.lib

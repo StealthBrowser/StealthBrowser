@@ -1,0 +1,90 @@
+# Stealth Browser - Build Configuration
+# GN build file for Chromium-based browser with Rust security integration
+
+import("//build/config/compiler/compiler.gni")
+import("//build/config/features.gni")
+import("//build/toolchain/toolchain.gni")
+
+declare_args() {
+  stealth_use_rust = true
+  stealth_adblocker_path = "//third_party/stealth-adblocker"
+  is_official_build = false
+}
+
+config("stealth_config") {
+  cflags = [
+    "-std=c++17",
+    "-DSTEALTH_BUILD",
+    "-DSTEALTH_VERSION=\"1.0.0\"",
+  ]
+  include_dirs = [
+    "//src",
+    "//src/browser",
+    "//src/renderer",
+    "//src/security/include",
+  ]
+  if (stealth_use_rust) {
+    defines += [ "STEALTH_HAS_RUST" ]
+    libs += [ "stealth_security" ]
+  }
+}
+
+source_set("browser_core") {
+  sources = [
+    "src/browser/browser_process.cc",
+    "src/browser/browser_process.h",
+    "src/browser/main.cc",
+  ]
+  deps = [
+    ":security_binding",
+    "//base",
+    "//content",
+  ]
+  configs += [ ":stealth_config" ]
+}
+
+source_set("renderer_core") {
+  sources = [
+    "src/renderer/renderer_process.cc",
+    "src/renderer/renderer_process.h",
+  ]
+  deps = [
+    ":security_binding",
+    "//base",
+    "//content",
+  ]
+  configs += [ ":stealth_config" ]
+}
+
+source_set("security_binding") {
+  sources = [
+    "src/security/security_binding.cc",
+    "src/security/security_binding.h",
+  ]
+  deps = [ "//base" ]
+  if (stealth_use_rust) {
+    sources += [ "src/security/rust_bridge.cc" ]
+    defines += [ "STEALTH_HAS_RUST" ]
+  }
+  configs += [ ":stealth_config" ]
+}
+
+executable("stealth_browser") {
+  output_name = "stealth-browser"
+  sources = [ "src/browser/main.cc" ]
+  deps = [
+    ":browser_core",
+    ":renderer_core",
+    ":security_binding",
+    "//base",
+    "//content",
+    "//ui",
+  ]
+  configs += [ ":stealth_config" ]
+  if (current_os == "win") {
+    sources += [ "src/browser/stealth.rc" ]
+  }
+  if (current_os == "mac") {
+    sources += [ "src/browser/stealth.icns" ]
+  }
+}

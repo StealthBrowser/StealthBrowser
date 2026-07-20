@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="shieldGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#7c3aed"/>
+      <stop offset="100%" style="stop-color:#4f46e5"/>
+    </linearGradient>
+    <linearGradient id="innerGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#a78bfa"/>
+      <stop offset="100%" style="stop-color:#818cf8"/>
+    </linearGradient>
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="8" result="coloredBlur"/>
+      <feMerge>
+        <feMergeNode in="coloredBlur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+  <!-- Shield body -->
+  <path d="M256 16 L480 80 L480 240 C480 360 380 460 256 496 C132 460 32 360 32 240 L32 80 Z"
+        fill="url(#shieldGrad)" stroke="url(#innerGrad)" stroke-width="4" filter="url(#glow)"/>
+  <!-- Inner shield -->
+  <path d="M256 48 L448 100 L448 240 C448 340 360 424 256 456 C152 424 64 340 64 240 L64 100 Z"
+        fill="none" stroke="url(#innerGrad)" stroke-width="2" opacity="0.6"/>
+  <!-- Eye icon (privacy/stealth) -->
+  <g transform="translate(256,220)" fill="none" stroke="white" stroke-width="6" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M-80,0 C-80,-50 -40,-80 0,-80 C40,-80 80,-50 80,0 C80,50 40,80 0,80 C-40,80 -80,50 -80,0 Z" opacity="0.9"/>
+    <circle cx="0" cy="0" r="30" fill="white" opacity="0.9"/>
+    <circle cx="0" cy="0" r="14" fill="url(#shieldGrad)"/>
+    <!-- Slash through eye (stealth) -->
+    <line x1="-60" y1="60" x2="60" y2="-60" stroke="white" stroke-width="6" opacity="0.9"/>
+  </g>
+  <!-- S letter below -->
+  <text x="256" y="360" text-anchor="middle" font-family="Arial, sans-serif" font-weight="900" font-size="72" fill="white" opacity="0.95">S</text>
+</svg>
